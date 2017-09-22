@@ -3,14 +3,64 @@ from bs4 import BeautifulSoup as bs
 import os.path
 import time
 from multiprocessing.dummy import Pool as ThreadPool, Process, Queue
-pool = ThreadPool(8) 
+pool = ThreadPool(8)
 
 
 htmlSource = os.getcwd() + "/htmlSource/" #directory to store all the html source text files
 maxDepth = 3
 now = time.time()
 
+class DLink:
+    link = ''
+    d = 0
+    def __init__(self, link, d):
+        self.link = link
+        self.d = d
+
 class Find:
+
+    def findChildrenI(self,link):
+        urls = Queue(-1)
+        urls.put(link)
+
+        while not urls.empty():
+            
+            currLink = urls.get()
+
+            if link.d > maxDepth: #Do not expand this link if the current depth is greater than the maxDepth 
+                continue
+
+            print("Processing " + currLink.link)
+            
+            try:
+                fileName = htmlSource + link.link.replace("/", "_").replace(":", "_")#replace / and : for the filename
+                siteHtml = urllib.request.urlopen(currLink.link).read()#read the raw HTML into a string
+                output = open(fileName + ".txt", "w") #create the file for the raw HTML
+                output.write(siteHtml.decode("utf-8")) #write the HTML into a file
+                output.flush()
+                output.close()
+
+                rawHTML = bs(siteHtml.decode("utf-8"), "html.parser")
+                
+                for childLink in rawHTML.find_all("a"): #iterate over all the 'a' tags
+                    if(childLink.get("href") is not None):
+                        if "http://" in childLink.get("href"): 
+                            #self.findChildren(childLink.get("href"), depth)
+                            urls.put(DLink(childLink.get("href"), link.d + 1))
+                        elif childLink.get("href")[0:2] == "//": #checks for a special case
+                            var = childLink.get("href")
+                            urls.put(DLink("http:" + childLink.get("href"), link.d + 1))
+                           # self.findChildren("http:" + childLink.get("href"), depth)
+                        elif not "https://" in childLink.get("href"): #another special case
+                            l = childLink.get("href")
+                            if l[0] == '/':
+                                l = l[1:]
+                            urls.put(DLink(currLink[:currLink.rfind('/') + 1] + l, link.d + 1))
+                           # self.findChildren(currLink[:currLink.rfind('/') + 1] + l, depth)
+            except:
+                continue
+
+
 
     def findChildren(self, link, depth): #This will find all child URLS (in 'a' elements) from link
         depth += 1
@@ -24,7 +74,7 @@ class Find:
                 print("found file " + fileName + ".txt")
                 return True
 
-            print("Processing " + link)
+            print("Processing " + link.link)
 
             siteHtml = urllib.request.urlopen(link).read()#read the raw HTML into a string
             output = open(fileName + ".txt", "w") #create the file for the raw HTML
@@ -68,7 +118,8 @@ class Find:
 if os.path.exists(htmlSource) is False:
     os.makedirs(htmlSource)
 f = Find()
-f.findChildren("http://www.auburn.edu/", 0)
+#f.findChildren("http://www.auburn.edu/", 0)
+f.findChildrenI(DLink("http://www.ask.com/", 0))
 
 print("Starting vec")
 pool.map(f.makeVec, os.listdir(htmlSource))
